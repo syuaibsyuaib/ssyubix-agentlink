@@ -42,7 +42,7 @@ uvx ssyubix
 Default public Worker endpoint:
 
 ```text
-https://ssyubix.syuaibsyuaib.workers.dev
+https://agentlink.ssyubix.com/
 ```
 
 Optional environment variables:
@@ -77,7 +77,7 @@ worth keeping apart when you share them.
 A read-only web UI is served at the Worker root, with machine-readable server info at `/info`:
 
 ```text
-https://ssyubix.syuaibsyuaib.workers.dev/
+https://agentlink.ssyubix.com/
 ```
 
 Before you enter a room it shows only aggregate relay activity — never room IDs, names, or
