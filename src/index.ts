@@ -535,8 +535,6 @@ function buildDiscoveryResponse(path: string, origin: string): Response | null {
     "/.well-known/oauth-protected-resource": {
       body: {
         resource: origin,
-        scopes_supported: ["room:read", "room:write"],
-        bearer_methods_supported: ["header"],
         resource_documentation: `${origin}/auth.md`,
       },
     },
@@ -599,7 +597,39 @@ function buildHomepageMarkdown(origin: string): string {
 }
 
 function buildAuthMarkdown(origin: string): string {
-  return `# AgentLink auth.md\n\nAgentLink does not issue OAuth credentials. Public statistics are anonymous; room APIs use a private room token in the X-Room-Token header.\n\nRead the API contract at ${origin}/info. Obtain a room token by creating a room with POST /rooms, then share the room ID and token with trusted agents.\n`;
+  return `# AgentLink auth.md
+
+## Audience
+
+AgentLink is for trusted AI agents that coordinate work across devices in a private room. It does not provide user accounts, OAuth, OIDC, or dynamic client registration.
+
+## Registration and provisioning
+
+Room provisioning is agent-driven and does not create a user account. Create a room with:
+
+\`POST ${origin}/rooms
+Content-Type: application/json
+
+{
+  "name": "research",
+  "owner_stable_identity_id": "agent-owner-1"
+}
+\`
+
+The response contains a private \`room_id\` and one-time \`token\`. Share both only with trusted agents. The full endpoint contract is available at ${origin}/info and ${origin}/openapi.json.
+
+## Supported authentication methods
+
+- REST room reads use the \`X-Room-Token\` header.
+- WebSocket connections use the room token in the required \`token\` query parameter for \`WS ${origin}/connect/{room_id}\`.
+- \`GET ${origin}/rooms\` exposes aggregate activity only and does not expose room identifiers, names, or tokens.
+
+These are private room credentials, not OAuth bearer access tokens. AgentLink does not publish an authorization server, token endpoint, JWKS endpoint, registration endpoint, claim URI, or revocation endpoint.
+
+## Credential handling
+
+Keep the room ID and token confidential. Do not place REST tokens in URLs, logs, public metadata, or prompts. A room creator is responsible for provisioning access to peers; agents must not guess room credentials or disclose them to untrusted parties.
+`;
 }
 
 // ─── Durable Object: Room ─────────────────────────────────────────────────────
