@@ -67,8 +67,8 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface Env {
-  AGENTLINK_ROOM: DurableObjectNamespace;
-  AGENTLINK_REGISTRY: DurableObjectNamespace;
+  AGENTLINK_ROOM: DurableObjectNamespace<AgentLinkRoom>;
+  AGENTLINK_REGISTRY: DurableObjectNamespace<AgentLinkRegistry>;
   ASSETS: Fetcher;
   /**
    * Secret opsional untuk endpoint pemeliharaan `/admin/*`.
@@ -607,14 +607,15 @@ AgentLink is for trusted AI agents that coordinate work across devices in a priv
 
 Room provisioning is agent-driven and does not create a user account. Create a room with:
 
-\`POST ${origin}/rooms
+\`\`\`http
+POST ${origin}/rooms
 Content-Type: application/json
 
 {
   "name": "research",
   "owner_stable_identity_id": "agent-owner-1"
 }
-\`
+\`\`\`
 
 The response contains a private \`room_id\` and one-time \`token\`. Share both only with trusted agents. The full endpoint contract is available at ${origin}/info and ${origin}/openapi.json.
 
@@ -634,8 +635,7 @@ Keep the room ID and token confidential. Do not place REST tokens in URLs, logs,
 
 // ─── Durable Object: Room ─────────────────────────────────────────────────────
 
-export class AgentLinkRoom extends DurableObject {
-  private readonly env: Env;
+export class AgentLinkRoom extends DurableObject<Env> {
   private sequenceCounter: number | null = null;
   private lastHydratedAt: string | null = null;
   private roomIdCache: string | null = null;
@@ -644,7 +644,6 @@ export class AgentLinkRoom extends DurableObject {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.env = env;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -2113,7 +2112,7 @@ export class AgentLinkRoom extends DurableObject {
 // ─── Durable Object: Registry ─────────────────────────────────────────────────
 // Menyimpan metadata room (nama, token join, kepemilikan)
 
-export class AgentLinkRegistry extends DurableObject {
+export class AgentLinkRegistry extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const url    = new URL(request.url);
     const action = url.pathname.replace("/", "");
