@@ -69,6 +69,7 @@ import {
 export interface Env {
   AGENTLINK_ROOM: DurableObjectNamespace;
   AGENTLINK_REGISTRY: DurableObjectNamespace;
+  ASSETS: Fetcher;
   /**
    * Secret opsional untuk endpoint pemeliharaan `/admin/*`.
    * Bila tidak diset, endpoint admin dimatikan sepenuhnya.
@@ -178,6 +179,49 @@ export default {
 
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
+    }
+
+    if (request.method === "GET" && path === "/health") {
+      return Response.json({ status: "ok", service: "AgentLink" }, {
+        headers: { ...corsHeaders, "Cache-Control": "public, max-age=60" },
+      });
+    }
+
+    if (request.method === "GET" && path === "/sitemap.xml") {
+      return new Response(buildSitemap(url.origin), {
+        headers: { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+      });
+    }
+
+    if (request.method === "GET" && path === "/robots.txt") {
+      return new Response([
+        "User-agent: *",
+        "Allow: /",
+        "Content-Signal: ai-train=no, search=yes, ai-input=yes",
+        `Sitemap: ${url.origin}/sitemap.xml`,
+        `Agentmap: ${url.origin}/.well-known/ai-catalog.json`,
+        "",
+      ].join("\n"), {
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+      });
+    }
+
+    const discoveryResponse = buildDiscoveryResponse(path, url.origin);
+    if (request.method === "GET" && discoveryResponse) {
+      return discoveryResponse;
+    }
+
+    if (request.method === "GET" && path === "/auth.md") {
+      return markdownResponse(buildAuthMarkdown(url.origin));
+    }
+
+    if (request.method === "GET" && path === "/" && acceptsMarkdown(request)) {
+      return markdownResponse(buildHomepageMarkdown(url.origin));
+    }
+
+    if (request.method === "GET" && path === "/") {
+      const assetResponse = await env.ASSETS.fetch(request);
+      return withDiscoveryLinks(assetResponse);
     }
 
     // ── GET /dashboard ── halaman dashboard sekarang di root; jaga link lama.
@@ -430,9 +474,121 @@ export default {
       return roomDO.fetch(newReq);
     }
 
+    if (request.method === "GET") {
+      const assetResponse = await env.ASSETS.fetch(request);
+      if (assetResponse.status !== 404) return assetResponse;
+    }
+
     return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
 };
+
+function acceptsMarkdown(request: Request): boolean {
+  return request.headers.get("Accept")?.split(",").some((value) =>
+    value.trim().split(";")[0] === "text/markdown"
+  ) ?? false;
+}
+
+function markdownResponse(body: string): Response {
+  return new Response(body, {
+    headers: {
+      "Content-Type": "text/markdown; charset=utf-8",
+      "Vary": "Accept",
+      "x-markdown-tokens": String(Math.ceil(body.length / 4)),
+    },
+  });
+}
+
+function withDiscoveryLinks(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.append("Link", '</.well-known/api-catalog>; rel="api-catalog"');
+  headers.append("Link", '</.well-known/ai-catalog.json>; rel="describedby"; type="application/json"');
+  headers.append("Link", '</info>; rel="service-doc"; type="application/json"');
+  headers.append("Vary", "Accept");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function buildSitemap(origin: string): string {
+  const pages = ["/", "/info", "/health", "/auth.md"];
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...pages.map((page) => `  <url><loc>${origin}${page}</loc></url>`),
+    "</urlset>",
+    "",
+  ].join("\n");
+}
+
+function buildDiscoveryResponse(path: string, origin: string): Response | null {
+  const documents: Record<string, { body: unknown; contentType?: string }> = {
+    "/.well-known/api-catalog": {
+      body: {
+        linkset: [{
+          anchor: `${origin}/info`,
+          "service-desc": [{ href: `${origin}/openapi.json`, type: "application/vnd.oai.openapi+json;version=3.1" }],
+          "service-doc": [{ href: `${origin}/info`, type: "application/json" }],
+          status: [{ href: `${origin}/health`, type: "application/json" }],
+        }],
+      },
+      contentType: 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
+    },
+    "/.well-known/oauth-protected-resource": {
+      body: {
+        resource: origin,
+        scopes_supported: ["room:read", "room:write"],
+        bearer_methods_supported: ["header"],
+        resource_documentation: `${origin}/auth.md`,
+      },
+    },
+    "/.well-known/mcp/server-card.json": {
+      body: {
+        serverInfo: { name: "AgentLink", version: "3.0.1" },
+        transport: { type: "websocket", endpoint: `${origin}/connect/{room_id}` },
+        capabilities: { tools: true, resources: true, prompts: false },
+        documentation: `${origin}/info`,
+      },
+    },
+    "/.well-known/ai-catalog.json": {
+      body: {
+        specVersion: "1.0",
+        host: { displayName: "AgentLink", identifier: `https://${new URL(origin).host}` },
+        entries: [
+          {
+            identifier: `urn:air:${new URL(origin).host}:api:agentlink`,
+            displayName: "AgentLink REST and WebSocket API",
+            type: "application/json",
+            url: `${origin}/info`,
+            representativeQueries: ["list AgentLink API endpoints", "create a private agent room"],
+          },
+          {
+            identifier: `urn:air:${new URL(origin).host}:mcp:ssyubix`,
+            displayName: "ssyubix local MCP server",
+            type: "application/mcp-server",
+            url: "https://pypi.org/project/ssyubix/",
+            representativeQueries: ["connect two agents through AgentLink", "send a message between agents"],
+          },
+        ],
+      },
+    },
+  };
+  const document = documents[path];
+  if (!document) return null;
+  return new Response(JSON.stringify(document.body, null, 2), {
+    headers: {
+      "Content-Type": document.contentType ?? "application/json; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
+
+function buildHomepageMarkdown(origin: string): string {
+  return `# AgentLink\n\nCross-device MCP relay for private AI-agent rooms.\n\n- Server information: ${origin}/info\n- API catalog: ${origin}/.well-known/api-catalog\n- API specification: ${origin}/openapi.json\n`;
+}
+
+function buildAuthMarkdown(origin: string): string {
+  return `# AgentLink auth.md\n\nAgentLink does not issue OAuth credentials. Public statistics are anonymous; room APIs use a private room token in the X-Room-Token header.\n\nRead the API contract at ${origin}/info. Obtain a room token by creating a room with POST /rooms, then share the room ID and token with trusted agents.\n`;
+}
 
 // ─── Durable Object: Room ─────────────────────────────────────────────────────
 

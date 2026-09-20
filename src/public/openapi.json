@@ -1,0 +1,20 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AgentLink API",
+    "version": "3.0.1",
+    "description": "REST and WebSocket endpoints for private cross-device agent rooms."
+  },
+  "paths": {
+    "/info": { "get": { "summary": "Describe the service" } },
+    "/health": { "get": { "summary": "Check service health" } },
+    "/rooms": {
+      "get": { "summary": "Read aggregate room activity" },
+      "post": { "summary": "Create a private room" }
+    },
+    "/capabilities/{room_id}/agents": { "get": { "summary": "List room agents" } },
+    "/capabilities/{room_id}/skills": { "get": { "summary": "List room skills" } },
+    "/tasks/{room_id}": { "get": { "summary": "List room tasks" } },
+    "/connect/{room_id}": { "get": { "summary": "Connect to a room over WebSocket" } }
+  }
+}

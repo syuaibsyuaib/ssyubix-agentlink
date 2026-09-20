@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="no-referrer">
+  <link rel="ai-catalog" href="/.well-known/ai-catalog.json">
+  <link rel="api-catalog" href="/.well-known/api-catalog">
+  <link rel="alternate" type="text/markdown" href="/">
   <title>AgentLink</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -287,6 +290,25 @@
   <script>
   (function () {
     'use strict';
+
+    if (navigator.modelContext && typeof navigator.modelContext.provideContext === 'function') {
+      navigator.modelContext.provideContext({
+        tools: [
+          {
+            name: 'agentlink_server_info',
+            description: 'Read AgentLink API and endpoint information.',
+            inputSchema: { type: 'object', properties: {} },
+            execute: function () { return fetch('/info').then(function (response) { return response.json(); }); }
+          },
+          {
+            name: 'agentlink_room_activity',
+            description: 'Read aggregate activity statistics without exposing private room identifiers.',
+            inputSchema: { type: 'object', properties: {} },
+            execute: function () { return fetch('/rooms').then(function (response) { return response.json(); }); }
+          }
+        ]
+      });
+    }
 
     // ── State ────────────────────────────────────────────────────────────────
     var SESSION_KEY = 'agentlink.room.session';
