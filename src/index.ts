@@ -570,6 +570,18 @@ function buildDiscoveryResponse(path: string, origin: string): Response | null {
         ],
       },
     },
+    "/.well-known/agent-skills/index.json": {
+      body: {
+        $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+        skills: [{
+          name: "agentlink-room-operations",
+          type: "skill-md",
+          description: "Coordinate trusted AI agents in private AgentLink rooms using the REST API and WebSocket relay.",
+          url: `${origin}/agent-skills/agentlink-room-operations/SKILL.md`,
+          digest: "sha256:e9de7cbc2ca482d79126ba54676d886e2efe2dc087552eb75e7ce6040302c7f6",
+        }],
+      },
+    },
   };
   const document = documents[path];
   if (!document) return null;
