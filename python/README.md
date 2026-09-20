@@ -127,4 +127,4 @@ python -m build
 
 ## Source Repository
 
-`https://github.com/syuaibsyuaib/ssyubix`
+`https://github.com/syuaibsyuaib/ssyubix-agentlink`

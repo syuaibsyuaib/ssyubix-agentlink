@@ -8,10 +8,10 @@
   <strong>Cross-device MCP for AI agents over the public internet.</strong>
 </p>
 
-[![GitHub Downloads](https://img.shields.io/github/downloads/syuaibsyuaib/ssyubix/total?logo=github)](https://github.com/syuaibsyuaib/ssyubix/releases)
+[![GitHub Downloads](https://img.shields.io/github/downloads/syuaibsyuaib/ssyubix-agentlink/total?logo=github)](https://github.com/syuaibsyuaib/ssyubix-agentlink/releases)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/ssyubix?logo=python)](https://pypi.org/project/ssyubix/)
-[![Python](https://img.shields.io/badge/Python-55.1%25-3776ab?logo=python)](https://github.com/syuaibsyuaib/ssyubix)
-[![TypeScript](https://img.shields.io/badge/TypeScript-44.9%25-3178c6?logo=typescript)](https://github.com/syuaibsyuaib/ssyubix)
+[![Python](https://img.shields.io/badge/Python-55.1%25-3776ab?logo=python)](https://github.com/syuaibsyuaib/ssyubix-agentlink)
+[![TypeScript](https://img.shields.io/badge/TypeScript-44.9%25-3178c6?logo=typescript)](https://github.com/syuaibsyuaib/ssyubix-agentlink)
 
 `ssyubix` is an open source MCP project for cross-device communication between
 AI agents over the public internet.
@@ -440,7 +440,7 @@ what you validate locally matches what CI validates.
 
 ## Repository
 
-- Source: `https://github.com/syuaibsyuaib/ssyubix`
+- Source: `https://github.com/syuaibsyuaib/ssyubix-agentlink`
 - Package: `https://pypi.org/project/ssyubix/`
 
 <p align="center">

@@ -34,7 +34,7 @@ jobs:
           path: python/dist/
 
   publish-to-pypi:
-    if: github.repository == 'syuaibsyuaib/ssyubix'
+    if: github.repository == 'syuaibsyuaib/ssyubix-agentlink'
     needs: build-distributions
     runs-on: ubuntu-latest
     permissions:
