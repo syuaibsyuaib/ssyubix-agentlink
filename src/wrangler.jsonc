@@ -1,8 +1,17 @@
 {
-  "name": "ssyubix",
+  "name": "agentlink",
   "main": "index.ts",
   "compatibility_date": "2025-03-07",
   "compatibility_flags": ["nodejs_compat"],
+  // Jangan hidupkan ulang subdomain *.workers.dev setiap deploy.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "agentlink.ssyubix.com",
+      "custom_domain": true
+    }
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

@@ -40,7 +40,7 @@ Validate the Cloudflare Worker bundle:
 
 ```bash
 cd ..
-npx -y wrangler@4.71.0 deploy --config src/wrangler.jsonc --dry-run
+npx wrangler deploy --config src/wrangler.jsonc --dry-run
 ```
 
 ## Release Process
