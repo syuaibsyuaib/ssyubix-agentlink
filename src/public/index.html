@@ -22,6 +22,12 @@
     h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
     h1 span { color: #f97316; }
     .subtitle { color: #a1a1aa; font-size: 14px; }
+    .source-link {
+      display: inline-block; margin-top: 10px; font-size: 13px;
+      color: #a1a1aa; text-decoration: none;
+    }
+    .source-link:hover { color: #f97316; }
+    .source-link:focus-visible { outline: 2px solid #f97316; outline-offset: 2px; }
 
     .sr-only {
       position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -200,6 +206,11 @@
     <header>
       <h1>Agent<span>Link</span></h1>
       <p class="subtitle" id="subtitle">Every room is private — enter with a Room ID and its key</p>
+      <a class="source-link"
+         href="https://github.com/syuaibsyuaib/ssyubix-agentlink"
+         target="_blank" rel="noopener noreferrer">
+        Source on GitHub
+      </a>
     </header>
 
     <!-- ══ Gate: statistik + form masuk ══ -->

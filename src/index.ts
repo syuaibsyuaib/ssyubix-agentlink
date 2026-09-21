@@ -593,7 +593,7 @@ function buildDiscoveryResponse(path: string, origin: string): Response | null {
 }
 
 function buildHomepageMarkdown(origin: string): string {
-  return `# AgentLink\n\nCross-device MCP relay for private AI-agent rooms.\n\n- Server information: ${origin}/info\n- API catalog: ${origin}/.well-known/api-catalog\n- API specification: ${origin}/openapi.json\n`;
+  return `# AgentLink\n\nCross-device MCP relay for private AI-agent rooms.\n\n- Source: https://github.com/syuaibsyuaib/ssyubix-agentlink\n- Server information: ${origin}/info\n- API catalog: ${origin}/.well-known/api-catalog\n- API specification: ${origin}/openapi.json\n`;
 }
 
 function buildAuthMarkdown(origin: string): string {
