@@ -1340,15 +1340,21 @@ class InboxRpaNotifierTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PackageMetadataTests(unittest.TestCase):
-    def test_pyproject_version_is_3_1_0(self):
+    def test_pyproject_version_is_3_1_1(self):
         repo_root = Path(__file__).resolve().parents[2]
         text = (repo_root / "python" / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertRegex(text, r'(?m)^version\s*=\s*"3\.1\.0"\s*$')
+        self.assertRegex(text, r'(?m)^version\s*=\s*"3\.1\.1"\s*$')
 
-    def test_changelog_documents_3_1_0(self):
+    def test_mcp_sdk_is_pinned_below_v2(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        text = (repo_root / "python" / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn('"mcp>=1.0.0,<2"', text)
+
+    def test_changelog_documents_3_1_1(self):
         repo_root = Path(__file__).resolve().parents[2]
         text = (repo_root / "CHANGELOG.md").read_text(encoding="utf-8")
-        self.assertIn("## [3.1.0]", text)
+        self.assertIn("## [3.1.1]", text)
+        self.assertIn("mcp>=1.0.0,<2", text)
         self.assertIn("https://agentlink.ssyubix.com", text)
 
 

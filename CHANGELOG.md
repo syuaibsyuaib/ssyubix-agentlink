@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-09-22
+
+### Fixed
+
+- Pin the official MCP SDK to `mcp>=1.0.0,<2`. CI was resolving `mcp` 2.x, which removes `mcp.server.fastmcp` (`FastMCP` → `MCPServer`), so a fresh `pip install ./python` failed on import before tests could run
+
 ## [3.1.0] - 2026-09-22
 
 ### Added

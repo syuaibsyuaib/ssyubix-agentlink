@@ -234,7 +234,7 @@ export default {
     if (path === "/info" && request.method === "GET") {
       return Response.json({
         name: "AgentLink",
-        version: "3.1.0",
+        version: "3.1.1",
         backend: "Cloudflare Workers + Durable Objects",
         endpoints: {
           dashboard: "GET /",
@@ -540,7 +540,7 @@ function buildDiscoveryResponse(path: string, origin: string): Response | null {
     },
     "/.well-known/mcp/server-card.json": {
       body: {
-        serverInfo: { name: "AgentLink", version: "3.1.0" },
+        serverInfo: { name: "AgentLink", version: "3.1.1" },
         transport: { type: "websocket", endpoint: `${origin}/connect/{room_id}` },
         capabilities: { tools: true, resources: true, prompts: false },
         documentation: `${origin}/info`,

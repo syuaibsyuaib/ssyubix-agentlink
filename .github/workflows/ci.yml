@@ -50,10 +50,13 @@ jobs:
           installed = metadata.version("ssyubix")
           assert installed == expected, f"installed {installed!r} != pyproject {expected!r}"
 
+          mcp_version = metadata.version("mcp")
+          assert mcp_version.startswith("1."), f"expected mcp 1.x, got {mcp_version!r}"
+
           from agentlink_mcp import server
           assert server.DEFAULT_AGENTLINK_URL == "https://agentlink.ssyubix.com", server.DEFAULT_AGENTLINK_URL
           assert "workers.dev" not in server.DEFAULT_AGENTLINK_URL
-          print(f"ssyubix {installed} -> {server.DEFAULT_AGENTLINK_URL}")
+          print(f"ssyubix {installed}; mcp {mcp_version} -> {server.DEFAULT_AGENTLINK_URL}")
           PY
 
       - name: Run unit tests
