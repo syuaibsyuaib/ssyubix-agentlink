@@ -1,6 +1,6 @@
-# Contributing to ssyubix
+# Contributing to agentlink-ssyubix
 
-Thanks for helping improve `ssyubix`.
+Thanks for helping improve `agentlink-ssyubix`.
 
 ## Before You Start
 
@@ -54,7 +54,7 @@ npx wrangler deploy --config src/wrangler.jsonc --dry-run
 Before the first automated release, configure the PyPI Trusted Publisher for:
 
 - owner: `syuaibsyuaib`
-- repository: `ssyubix`
+- repository: `agentlink-ssyubix`
 - workflow file: `.github/workflows/release.yml`
 - environment: `pypi`
 
