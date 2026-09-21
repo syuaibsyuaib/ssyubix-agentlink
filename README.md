@@ -342,11 +342,13 @@ Since AgentLink only speaks MCP over the wire, any MCP-capable client can join t
 - `agent_send`
 - `agent_broadcast`
 - `agent_read_inbox`
+- `inbox_enable_notifications`
 - `agent_list`
 
 ## Available MCP Resources
 
 - `ssyubix://guides/readme-first`
+- `ssyubix://inbox/status`
 - `ssyubix://rooms/{room_id}/agents`
 - `ssyubix://rooms/{room_id}/agents/{agent_id}`
 - `ssyubix://rooms/{room_id}/skills`

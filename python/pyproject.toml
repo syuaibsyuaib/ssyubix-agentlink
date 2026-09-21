@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ssyubix"
-version = "3.0.1"
+version = "3.1.0"
 description = "AgentLink MCP for cross-device AI agent communication via Cloudflare Workers"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1155,9 +1155,11 @@ class ToolDefinitionMetadataTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(tools["room_admin_remove"].annotations.destructiveHint)
 
         self.assertIn("closes the previous WebSocket", tools["room_join"].description)
+        self.assertIn("RPA inbox notifier", tools["room_join"].description)
         self.assertIn("local retry queue", tools["room_leave"].description)
         self.assertIn("queued_for_retry", tools["agent_send"].description)
         self.assertIn("permanently removes", tools["agent_read_inbox"].description)
+        self.assertIn("RPA inbox notifier", tools["inbox_enable_notifications"].description)
         self.assertNotIn("reason", tools["task_accept"].inputSchema["properties"])
 
 
@@ -1206,11 +1208,12 @@ class DefaultRelayEndpointTests(unittest.TestCase):
     def test_default_points_at_the_deployed_worker(self):
         self.assertEqual(
             server.DEFAULT_AGENTLINK_URL,
-            "https://ssyubix.syuaibsyuaib.workers.dev",
+            "https://agentlink.ssyubix.com",
         )
 
-    def test_default_does_not_use_the_retired_hostname(self):
-        self.assertNotIn("agentlink.syuaibsyuaib", server.DEFAULT_AGENTLINK_URL)
+    def test_default_does_not_use_retired_workers_dev_hosts(self):
+        self.assertNotIn("workers.dev", server.DEFAULT_AGENTLINK_URL)
+        self.assertNotIn("syuaibsyuaib.workers.dev", server.DEFAULT_AGENTLINK_URL)
 
     def test_default_is_a_bare_https_origin(self):
         # Path atau slash di ujung akan merusak URL yang dibentuk lewat f-string.
@@ -1230,9 +1233,123 @@ class DefaultRelayEndpointTests(unittest.TestCase):
                 f"{name} tidak menyebut endpoint default yang benar",
             )
             self.assertNotIn(
+                "ssyubix.syuaibsyuaib.workers.dev", text,
+                f"{name} masih menyebut hostname workers.dev yang sudah diganti",
+            )
+            self.assertNotIn(
                 "agentlink.syuaibsyuaib.workers.dev", text,
                 f"{name} masih menyebut hostname yang sudah pensiun",
             )
+
+
+class InboxRpaNotifierTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.original_inbox = list(server.inbox)
+        self.original_current_room = server.current_room
+        self.original_session = server._mcp_notify_session
+        self.original_enabled = server.inbox_notifier_enabled
+        self.original_last = server._last_notified_unread_count
+        self.original_local_state_dir = server.local_state_dir
+        self.tempdir = tempfile.TemporaryDirectory()
+        server.local_state_dir = Path(self.tempdir.name)
+        server.inbox.clear()
+        server.current_room = {
+            "room_id": "ROOM42",
+            "last_read_sequence": 0,
+            "local_cache_path": str(Path(self.tempdir.name) / "ROOM42.json"),
+            "retry_queue": [],
+        }
+        server.inbox_notifier_enabled = True
+        server._mcp_notify_session = None
+        server._last_notified_unread_count = None
+
+    def tearDown(self):
+        server.inbox[:] = self.original_inbox
+        server.current_room = self.original_current_room
+        server._mcp_notify_session = self.original_session
+        server.inbox_notifier_enabled = self.original_enabled
+        server._last_notified_unread_count = self.original_last
+        server.local_state_dir = self.original_local_state_dir
+        self.tempdir.cleanup()
+
+    def test_status_payload_is_minimal(self):
+        server.inbox[:] = [
+            {"type": "message", "sequence": 1, "content": "secret body must not leak"},
+            {"type": "message", "sequence": 2, "content": "another secret"},
+        ]
+        payload = server._inbox_status_payload()
+        self.assertEqual(payload["unread_count"], 2)
+        self.assertEqual(payload["room_id"], "ROOM42")
+        self.assertNotIn("messages", payload)
+        self.assertNotIn("content", payload)
+        dumped = json.dumps(payload)
+        self.assertNotIn("secret", dumped)
+
+    async def test_emit_sends_resource_updated_and_log_without_bodies(self):
+        calls = {"resource": 0, "logs": []}
+
+        class FakeSession:
+            async def send_resource_updated(self, uri):
+                calls["resource"] += 1
+                self.last_uri = str(uri)
+
+            async def send_log_message(self, level, data, logger=None, related_request_id=None):
+                calls["logs"].append({"level": level, "logger": logger, "data": data})
+
+        session = FakeSession()
+        server._bind_mcp_notify_session(session)
+        server.inbox[:] = [
+            {"type": "message", "sequence": 3, "content": "do-not-send"},
+        ]
+        await server._emit_inbox_rpa_notification(force=True)
+
+        self.assertEqual(calls["resource"], 1)
+        self.assertEqual(session.last_uri, server.INBOX_STATUS_URI)
+        self.assertEqual(len(calls["logs"]), 1)
+        self.assertEqual(calls["logs"][0]["logger"], "ssyubix.inbox.rpa")
+        self.assertEqual(calls["logs"][0]["data"]["unread_count"], 1)
+        self.assertNotIn("do-not-send", json.dumps(calls["logs"][0]["data"]))
+
+    async def test_emit_skips_duplicate_unread_count(self):
+        calls = {"resource": 0}
+
+        class FakeSession:
+            async def send_resource_updated(self, uri):
+                calls["resource"] += 1
+
+            async def send_log_message(self, **kwargs):
+                return None
+
+        server._bind_mcp_notify_session(FakeSession())
+        server.inbox[:] = [{"type": "message", "sequence": 1, "content": "x"}]
+        await server._emit_inbox_rpa_notification(force=True)
+        await server._emit_inbox_rpa_notification(force=False)
+        self.assertEqual(calls["resource"], 1)
+
+    async def test_inbox_status_resource_and_tool_are_registered(self):
+        tools = {tool.name: tool for tool in await server.mcp.list_tools()}
+        self.assertIn("inbox_enable_notifications", tools)
+        self.assertTrue(tools["inbox_enable_notifications"].annotations.readOnlyHint)
+
+        resources = await server.mcp.list_resources()
+        uris = {str(resource.uri) for resource in resources}
+        self.assertIn(server.INBOX_STATUS_URI, uris)
+
+        status = json.loads(server.inbox_status_resource())
+        self.assertIn("unread_count", status)
+
+
+class PackageMetadataTests(unittest.TestCase):
+    def test_pyproject_version_is_3_1_0(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        text = (repo_root / "python" / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertRegex(text, r'(?m)^version\s*=\s*"3\.1\.0"\s*$')
+
+    def test_changelog_documents_3_1_0(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        text = (repo_root / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertIn("## [3.1.0]", text)
+        self.assertIn("https://agentlink.ssyubix.com", text)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,9 @@ local cache as a speed-up and a buffer for when the connection is unstable.
    Every room is private: `room_join` needs the `room_id` **and** the token from
    the room owner. There is no public room directory, so both values have to be
    handed to you.
-3. Read `room_info` and `agent_read_inbox` before sending anything new.
+3. Read `room_info`. Prefer the RPA inbox notifier
+   (`ssyubix://inbox/status` / `inbox_enable_notifications`) over polling;
+   call `agent_read_inbox` only after a notification reports `unread_count > 0`.
 4. Update your capability card early with:
    - `capability_get_self`
    - `capability_upsert_self`
@@ -26,7 +28,9 @@ local cache as a speed-up and a buffer for when the connection is unstable.
 
 - Use `agent_send` for targeted delegation.
 - Use `agent_broadcast` only for coordination that genuinely concerns the whole room.
-- When joining an active room, read the inbox first so you do not repeat context that already exists.
+- When joining an active room, wait for the RPA inbox signal
+  (`ssyubix://inbox/status`) and only then read unread messages — do not poll
+  `agent_read_inbox` in a loop.
 - Keep the capability card short and stable, focused on `skills`, `tool_access`, `constraints`, and `availability`.
 - `room_local_summary` is a local cache; use it as a quick hint, not as global truth.
 - If `agent_send` or `agent_broadcast` lands in the local retry queue, do not spam resends. Let reconnect and replay do their work.
@@ -45,6 +49,7 @@ When updating other agents, prefer this short format:
 ## Resources Worth Knowing
 
 - `ssyubix://guides/readme-first`
+- `ssyubix://inbox/status`
 - `ssyubix://rooms/{room_id}/agents`
 - `ssyubix://rooms/{room_id}/agents/{agent_id}`
 - `ssyubix://rooms/{room_id}/skills`
@@ -53,7 +58,8 @@ When updating other agents, prefer this short format:
 
 SERVER_INSTRUCTIONS = (
     "Read `ssyubix://guides/readme-first` before first use when possible. "
-    "Join a room, inspect room state and unread inbox before speaking, keep "
+    "Join a room, prefer the RPA inbox notifier (`ssyubix://inbox/status`) over "
+    "polling, call `agent_read_inbox` only when unread_count rises, keep "
     "capability data up to date, prefer direct messages for delegation, and "
     "treat local summaries as cache rather than the global source of truth."
 )
@@ -62,7 +68,8 @@ READ_ME_FIRST_PROMPT = """Follow this guide the first time you use `ssyubix` in 
 
 1. Read the `ssyubix://guides/readme-first` resource.
 2. Make sure you have called `agent_register`.
-3. Enter a room, then read `room_info` and `agent_read_inbox`.
-4. Sync your capability card before you start collaborating.
-5. Only then send messages or delegate work to other agents.
+3. Enter a room (`room_join` arms the inbox RPA notifier automatically).
+4. Watch `ssyubix://inbox/status` for unread_count; call `agent_read_inbox` only when needed.
+5. Sync your capability card before you start collaborating.
+6. Only then send messages or delegate work to other agents.
 """

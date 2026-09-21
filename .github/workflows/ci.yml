@@ -36,11 +36,49 @@ jobs:
           python -m pip install build
           python -m pip install ./python
 
+      - name: Verify package version and default relay endpoint
+        run: |
+          python - <<'PY'
+          import re
+          from importlib import metadata
+          from pathlib import Path
+
+          text = Path("python/pyproject.toml").read_text(encoding="utf-8")
+          match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+          assert match, "version missing from python/pyproject.toml"
+          expected = match.group(1)
+          installed = metadata.version("ssyubix")
+          assert installed == expected, f"installed {installed!r} != pyproject {expected!r}"
+
+          from agentlink_mcp import server
+          assert server.DEFAULT_AGENTLINK_URL == "https://agentlink.ssyubix.com", server.DEFAULT_AGENTLINK_URL
+          assert "workers.dev" not in server.DEFAULT_AGENTLINK_URL
+          print(f"ssyubix {installed} -> {server.DEFAULT_AGENTLINK_URL}")
+          PY
+
       - name: Run unit tests
         run: python -m unittest discover -s python/tests -p "test_*.py" -v
 
       - name: Build Python package
         run: python -m build ./python
+
+      - name: Verify built distributions carry the package version
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          text = Path("python/pyproject.toml").read_text(encoding="utf-8")
+          match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+          assert match, "version missing from python/pyproject.toml"
+          expected = match.group(1)
+          dist = Path("python/dist")
+          wheels = list(dist.glob(f"ssyubix-{expected}-*.whl"))
+          sdists = list(dist.glob(f"ssyubix-{expected}.tar.gz"))
+          assert wheels, f"missing wheel for {expected} in {sorted(p.name for p in dist.iterdir())}"
+          assert sdists, f"missing sdist for {expected} in {sorted(p.name for p in dist.iterdir())}"
+          print("dist ok:", *(p.name for p in wheels + sdists))
+          PY
 
   worker-dry-run:
     runs-on: ubuntu-latest

@@ -6,11 +6,17 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-09-22
+
 ### Added
+
+- RPA inbox notifier for the Python MCP server: after `room_join` (or `inbox_enable_notifications`), unread-count changes push a minimal MCP signal on `ssyubix://inbox/status` (`resources/updated` + log payload with `unread_count` / `room_id` only — never message bodies) so agents need not poll `agent_read_inbox`
 
 - Added `POST /admin/prune-rooms` for deleting registry entries of rooms left unjoinable by the move to private-only rooms. It is disabled unless the `REGISTRY_ADMIN_TOKEN` secret is set, requires that token in an `X-Admin-Token` header, defaults to a dry run, and can only delete rooms that have no join token
 
 ### Changed
+
+- Default relay endpoint is now `https://agentlink.ssyubix.com` (custom domain). The previous `*.workers.dev` package default is retired; set `AGENTLINK_URL` only for forks or self-hosted Workers
 
 - Every message the relay and the Python MCP client emit is now English: validation and authorization errors, ACK timeouts, retry-queue notices, room welcome text, MCP tool parameter descriptions, and the `ssyubix://guides/readme-first` onboarding guide. Code comments stay in Indonesian
 

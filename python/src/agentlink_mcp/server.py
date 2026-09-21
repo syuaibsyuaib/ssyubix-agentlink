@@ -21,9 +21,9 @@ import aiohttp
 import websockets
 import websockets.client
 from websockets.exceptions import ConnectionClosed
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from pydantic import AnyUrl, BaseModel, Field, ConfigDict, field_validator, model_validator
 from .onboarding import (
     READ_ME_FIRST_MARKDOWN,
     READ_ME_FIRST_PROMPT,
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 # Worker di-deploy dengan nama brand `ssyubix`, jadi hostname-nya mengikuti nama itu.
 # Host lama `agentlink.*` sudah tidak ada sejak Worker berganti nama; jangan dipakai lagi.
-DEFAULT_AGENTLINK_URL = "https://ssyubix.syuaibsyuaib.workers.dev"
+DEFAULT_AGENTLINK_URL = "https://agentlink.ssyubix.com"
 
 AGENTLINK_URL = os.environ.get("AGENTLINK_URL", DEFAULT_AGENTLINK_URL).rstrip("/")
 AGENT_NAME    = os.environ.get("AGENT_NAME", f"agent-{uuid.uuid4().hex[:6]}")
@@ -63,6 +63,14 @@ room_credentials: Optional[dict] = None
 reconnect_task: Optional[asyncio.Task] = None
 retry_replay_task: Optional[asyncio.Task] = None
 auto_reconnect_enabled: bool = False
+
+# RPA inbox notifier: observe → detect unread delta → act with a minimal MCP signal.
+# Payload never includes message bodies — only counts and room identifiers.
+INBOX_STATUS_URI = "ssyubix://inbox/status"
+inbox_notifier_enabled: bool = True
+_mcp_notify_session: Optional[Any] = None
+_last_notified_unread_count: Optional[int] = None
+_inbox_notify_task: Optional[asyncio.Task] = None
 
 
 def _resolve_local_state_dir() -> Path:
@@ -646,6 +654,87 @@ def _restore_local_room_state(room_id: str):
     _persist_local_room_state()
 
 
+def _count_unread_inbox() -> int:
+    """Hitung entri inbox dengan sequence di atas cursor baca lokal."""
+    room_last_read = _safe_int(current_room.get("last_read_sequence")) if current_room else 0
+    return len([
+        message for message in inbox
+        if isinstance(message, dict)
+        and isinstance(message.get("sequence"), int)
+        and message.get("sequence", 0) > room_last_read
+    ])
+
+
+def _inbox_status_payload() -> dict:
+    """Sinyal minimal untuk RPA / resource status — tanpa isi pesan."""
+    return {
+        "unread_count": _count_unread_inbox(),
+        "room_id": current_room.get("room_id") if current_room else None,
+        "last_read_sequence": (
+            _safe_int(current_room.get("last_read_sequence")) if current_room else 0
+        ),
+        "notifier_armed": bool(
+            inbox_notifier_enabled and _mcp_notify_session is not None
+        ),
+        "updated_at": _now_iso(),
+    }
+
+
+def _bind_mcp_notify_session(session: Any) -> None:
+    """Ikat sesi MCP stdio supaya watcher RPA bisa push tanpa tool call aktif."""
+    global _mcp_notify_session
+    _mcp_notify_session = session
+
+
+def _schedule_inbox_rpa_notify(*, force: bool = False) -> None:
+    """Jadwalkan notifikasi RPA di event loop yang sedang berjalan (debounce 1 task)."""
+    global _inbox_notify_task
+    if not inbox_notifier_enabled or _mcp_notify_session is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    if _inbox_notify_task is not None and not _inbox_notify_task.done():
+        if not force:
+            return
+        _inbox_notify_task.cancel()
+    _inbox_notify_task = loop.create_task(_emit_inbox_rpa_notification(force=force))
+
+
+async def _emit_inbox_rpa_notification(*, force: bool = False) -> None:
+    """
+    RPA act-step: kirim sinyal MCP minimal saat unread_count berubah.
+
+    - ``notifications/resources/updated`` pada ``ssyubix://inbox/status``
+    - ``notifications/message`` (log) berisi JSON ringkas tanpa body pesan
+    """
+    global _last_notified_unread_count, _inbox_notify_task
+    session = _mcp_notify_session
+    if not inbox_notifier_enabled or session is None:
+        return
+    payload = _inbox_status_payload()
+    unread_count = payload["unread_count"]
+    if (
+        not force
+        and _last_notified_unread_count is not None
+        and unread_count == _last_notified_unread_count
+    ):
+        return
+    _last_notified_unread_count = unread_count
+    try:
+        await session.send_resource_updated(uri=AnyUrl(INBOX_STATUS_URI))
+        await session.send_log_message(
+            level="info",
+            logger="ssyubix.inbox.rpa",
+            data=payload,
+        )
+    except Exception as exc:
+        logger.warning("Inbox RPA notification failed: %s", exc)
+    finally:
+        _inbox_notify_task = None
+
+
 def _append_inbox_entry(entry: dict):
     room_id = entry.get("room_id")
     if room_id is None and current_room is not None:
@@ -655,6 +744,7 @@ def _append_inbox_entry(entry: dict):
     inbox.append(entry)
     inbox[:] = _compact_messages(inbox)
     _persist_local_room_state()
+    _schedule_inbox_rpa_notify()
 
 
 def _read_local_room_summary(room_id: str) -> dict:
@@ -1473,6 +1563,19 @@ def readme_first_resource() -> str:
     return READ_ME_FIRST_MARKDOWN
 
 
+@mcp.resource(
+    INBOX_STATUS_URI,
+    name="ssyubix-inbox-status",
+    description=(
+        "Minimal RPA inbox signal: unread_count and room_id only. "
+        "Subscribe or watch for resources/updated; never contains message bodies."
+    ),
+    mime_type="application/json",
+)
+def inbox_status_resource() -> str:
+    return json.dumps(_inbox_status_payload(), indent=2)
+
+
 @mcp.prompt(
     name="ssyubix_readme_first",
     title="ssyubix Readme First",
@@ -1480,6 +1583,14 @@ def readme_first_resource() -> str:
 )
 def readme_first_prompt() -> str:
     return READ_ME_FIRST_PROMPT
+
+
+class InboxNotifierInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = Field(
+        default=True,
+        description="True arms the RPA inbox notifier; False disarms it",
+    )
 
 
 class CapabilitySkillInput(BaseModel):
@@ -2072,7 +2183,7 @@ async def room_create(params: CreateRoomInput) -> str:
 
 
 @mcp.tool(name="room_join")
-async def room_join(params: JoinRoomInput) -> str:
+async def room_join(params: JoinRoomInput, ctx: Context) -> str:
     """
     Join an existing room and open its Cloudflare WebSocket connection.
 
@@ -2080,8 +2191,12 @@ async def room_join(params: JoinRoomInput) -> str:
     required; there is no way to discover or enter a room without them. Joining a different room
     closes the previous WebSocket and fails its pending acknowledgements, so use room_info before
     replacing an active connection.
+
+    Also arms the RPA inbox notifier for this MCP session so unread-count changes are pushed
+    without polling agent_read_inbox.
     """
     global ws_conn, current_room, agent_id, room_credentials, auto_reconnect_enabled
+    _bind_mcp_notify_session(ctx.session)
     rid = params.room_id.upper()
     auto_reconnect_enabled = False
     _cancel_reconnect_task()
@@ -2097,6 +2212,7 @@ async def room_join(params: JoinRoomInput) -> str:
     try:
         welcome = await _connect_room(rid, params.token, reconnecting=False)
         auto_reconnect_enabled = True
+        _schedule_inbox_rpa_notify(force=True)
         existing = welcome.get("agents", [])
 
         return json.dumps({"success": True, "room_id": rid, "my_agent_id": agent_id,
@@ -2389,6 +2505,9 @@ async def agent_read_inbox(params: ReadInboxInput) -> str:
     Use only_unread to filter by the local read cursor. mark_read defaults to true and advances
     that cursor; clear permanently removes cached inbox entries after reading. Use room_info for
     connection state, not this tool.
+
+    Prefer waiting for the RPA inbox notification (ssyubix://inbox/status) instead of polling
+    this tool; call it only after a notification reports unread_count > 0.
     """
     room_last_read = _safe_int(current_room.get("last_read_sequence")) if current_room else 0
     visible_messages = inbox
@@ -2410,18 +2529,51 @@ async def agent_read_inbox(params: ReadInboxInput) -> str:
     if current_room is not None:
         current_room["local_cached_message_count"] = len(inbox)
     _persist_local_room_state()
-    unread_count = len([
-        message for message in inbox
-        if isinstance(message, dict)
-        and isinstance(message.get("sequence"), int)
-        and message.get("sequence", 0) > room_last_read
-    ])
+    unread_count = _count_unread_inbox()
+    _schedule_inbox_rpa_notify(force=True)
     return json.dumps({"messages": messages, "count": len(messages),
         "total_in_inbox": len(inbox), "cleared": params.clear,
         "only_unread": params.only_unread, "mark_read": params.mark_read,
         "last_read_sequence": room_last_read,
         "unread_count": unread_count,
         "cache_path": current_room.get("local_cache_path") if current_room else None}, indent=2)
+
+
+@mcp.tool(
+    name="inbox_enable_notifications",
+    annotations=ToolAnnotations(readOnlyHint=True),
+)
+async def inbox_enable_notifications(params: InboxNotifierInput, ctx: Context) -> str:
+    """
+    Arm or disarm the RPA inbox notifier for this MCP session.
+
+    When armed, the server watches the local inbox and pushes a minimal signal
+    (unread_count + room_id only) via resources/updated on ssyubix://inbox/status
+    and a matching log notification. Message bodies are never included. room_join
+    arms this automatically; use this tool to re-bind the session or turn it off.
+    """
+    global inbox_notifier_enabled, _last_notified_unread_count
+    _bind_mcp_notify_session(ctx.session)
+    inbox_notifier_enabled = bool(params.enabled)
+    if not inbox_notifier_enabled:
+        _last_notified_unread_count = None
+        return json.dumps({
+            "success": True,
+            "enabled": False,
+            "message": "Inbox RPA notifier disarmed.",
+            "status": _inbox_status_payload(),
+        }, indent=2)
+    await _emit_inbox_rpa_notification(force=True)
+    return json.dumps({
+        "success": True,
+        "enabled": True,
+        "resource_uri": INBOX_STATUS_URI,
+        "message": (
+            "Inbox RPA notifier armed. Wait for unread_count changes on "
+            f"{INBOX_STATUS_URI}; then call agent_read_inbox only when needed."
+        ),
+        "status": _inbox_status_payload(),
+    }, indent=2)
 
 
 @mcp.tool(

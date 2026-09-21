@@ -27,6 +27,32 @@ jobs:
           python -m pip install build
           python -m build ./python
 
+      - name: Verify release version matches pyproject.toml
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          text = Path("python/pyproject.toml").read_text(encoding="utf-8")
+          match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+          assert match, "version missing from python/pyproject.toml"
+          expected = match.group(1)
+
+          dist = Path("python/dist")
+          wheels = list(dist.glob(f"ssyubix-{expected}-*.whl"))
+          sdists = list(dist.glob(f"ssyubix-{expected}.tar.gz"))
+          assert wheels and sdists, f"built artifacts missing for {expected}: {sorted(p.name for p in dist.iterdir())}"
+
+          ref = os.environ.get("GITHUB_REF", "")
+          if ref.startswith("refs/tags/v"):
+              tag = ref.rsplit("/", 1)[-1].removeprefix("v")
+              assert tag == expected, f"git tag {tag!r} != package version {expected!r}"
+              print(f"tag v{tag} matches package {expected}")
+          else:
+              print(f"workflow_dispatch build for package {expected} (no tag check)")
+          PY
+
       - name: Upload distributions
         uses: actions/upload-artifact@v7
         with:
